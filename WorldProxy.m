@@ -75,7 +75,7 @@ classdef WorldProxy
                 
                 obj.m_nTimeStep = obj.m_nTimeStep+1;
                 
-                pause(0.001) 
+                pause(0.07) % for it to be 20 fps
             end
         end
         

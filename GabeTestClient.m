@@ -52,6 +52,7 @@ function GabeTestClient( sName, sColor, ProxyPortNum )
        ApplyCommandNew( robot,u );
 %        fprintf('Updating at %5.2fhz\r\r\r\r\r\r\r\r\r', 1/toc(t) );
        drawnow();
+       pause(0.1); % wait 
     end
 end
  

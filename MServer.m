@@ -7,22 +7,28 @@ classdef MServer < handle
         m_Map;
         m_nSocket;% server socket
         m_ImageHandle;
+        
         m_vClientWaitTime;
-        m_nMaxWaitClientTime =2;
+        m_vClientMaxWaitTime;
+        
+        m_vClientWaitNum;
+        m_nClientMaxWaitNum;
+        
         m_nTimeStep;
     end
     methods
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         % clear all;clear all;mserver = MServer('DilatedMap.png');mserver.Run();
         function obj = MServer( sMapfile )
-%             pnet('closeall');
-            obj.m_sHostname = '0.0.0.0';
-            obj.m_nHostport = 9999;
-            obj.m_Map = Map();
+            obj.m_sHostname         = '0.0.0.0';
+            obj.m_nHostport         = 9999;
+            obj.m_Map               = Map();
             obj.m_Map.Init( sMapfile, 0, 0, 0.1 ); % top, left, meters per pixel
-            obj.m_vClients = [];
-            obj.m_nSocket = pnet( 'tcpsocket', obj.m_nHostport );
-            obj.m_nTimeStep = 0;
+            
+            obj.m_vClients          = [];
+            obj.m_nSocket           = pnet( 'tcpsocket', obj.m_nHostport );
+            obj.m_nTimeStep         = 0;
+            obj.m_nClientMaxWaitNum = 100;
         end
 
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -39,11 +45,13 @@ classdef MServer < handle
                 % draw state
                 DrawState(obj);
                 
-                obj.m_nTimeStep = obj.m_nTimeStep +1;                
+                obj.m_nTimeStep = obj.m_nTimeStep +1;  
+                
+                % wait for sometime to avoid network delay.
+                pause(0.03) 
             end
         end
 
-        
         
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         function UpdateClient(obj, client, msg)
@@ -78,7 +86,7 @@ classdef MServer < handle
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         function msg = RecvLatestMsg(obj, Socket, CurTimeStep, RecurseNum)
             RecurseNum = RecurseNum +1;
-            msg = RecvMsg( Socket, 0 );% use socket
+            msg = RecvMsg( Socket, 0.002);% use socket
             % set max recurse num 
             if(RecurseNum>=495)
                fprintf('type is %s, timestep is %d, desire timestep %d\n',msg.type, msg.timestep,CurTimeStep);
@@ -114,17 +122,22 @@ classdef MServer < handle
                     % try to get robot state from client
                     if strcmp(msg.type, 'UPDATE_ROBOT') ==1
                        obj.m_vClientWaitTime(ii) = 0;
+                       obj.m_vClientWaitNum(ii) = 0;
                        obj.UpdateClient(c, msg);
                     % client request add new robot
                     elseif strcmp(msg.type,'ADD_PROXY_ROBOT') == 1
                        obj.m_vClientWaitTime(ii) = 0;
+                       obj.m_vClientWaitNum(ii) = 0;
                        obj.AddProxyRobot(c, msg);
                     else
                        obj.m_vClientWaitTime(ii) = obj.m_vClientWaitTime(ii) + toc(WaitTime);
+                       obj.m_vClientWaitNum(ii) = obj.m_vClientWaitNum(ii) + 1;
                     end
                 else
                     obj.m_vClientWaitTime(ii) = obj.m_vClientWaitTime(ii) + toc(WaitTime);
-                    fprintf('Cannot receive any msg from client.. Total waited %f for client %d \n', obj.m_vClientWaitTime(ii) , ii);
+                    obj.m_vClientWaitNum(ii) = obj.m_vClientWaitNum(ii) + 1;
+%                     fprintf('Cannot receive any msg from client.. Total waited %f for client %d \n', obj.m_vClientWaitTime(ii) , ii);
+                    fprintf('Cannot receive any msg from client.. Total waited %d Times for client %d \n', obj.m_vClientWaitNum(ii) , ii);
                 end
             end
             
@@ -144,7 +157,7 @@ classdef MServer < handle
             
             %% delete client if we lost it
             for ii = 1:size(obj.m_vClients,2)
-                if(obj.m_vClientWaitTime(ii) >0.6)
+                if(obj.m_vClientWaitTime(ii) >0.6) || obj.m_vClientWaitNum(ii)>obj.m_nClientMaxWaitNum
                     % delete lost client
                     fprintf('Delete lost client! No Response Over %f seconds.\n',obj.m_vClientWaitTime(ii));
                     obj.m_vClients(ii) = [];
@@ -248,6 +261,7 @@ classdef MServer < handle
             c.m_Socket = con;% save socket for later usages
             obj.m_vClients = [obj.m_vClients c ];
             obj.m_vClientWaitTime = [obj.m_vClientWaitTime 0 ];
+            obj.m_vClientWaitNum = [obj.m_vClientWaitNum 0];
 
             % 2) All good? Send state to client.
             rmsg.type = 'WELCOME_CLIENT';
