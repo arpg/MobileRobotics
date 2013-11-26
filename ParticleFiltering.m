@@ -1,11 +1,11 @@
 %% call 
-% ParticleFiltering([],[],nbeams_,maxrange_,fov_,N_particles_,threshold_) 
+% ParticleFiltering([],[],nbeams_,maxrange_,fov_,map_,N_particles_,threshold_) 
 % first
 %% For all other calls use:
 % ParticleFiltering(scan_,command_)
 %% output
 % poses = 3 x N_particles 
-function poses = ParticleFiltering(scan_,command_,nbeams_,maxrange_,fov_,N_particles_,threshold_)
+function poses = ParticleFiltering(scan_,command_,nbeams_,maxrange_,fov_,map_,N_particles_,threshold_)
     persistent particles;
     persistent map;
     persistent nbeams;
@@ -13,7 +13,7 @@ function poses = ParticleFiltering(scan_,command_,nbeams_,maxrange_,fov_,N_parti
     persistent fov;
     persistent N_particles;
     persistent threshold;
-    if nargin == 1
+    if nargin == 8
         N_particles = N_particles_;
         threshold = threshold_;
         particles = [];
