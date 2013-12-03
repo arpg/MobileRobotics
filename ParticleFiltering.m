@@ -4,8 +4,8 @@
 %% For all other calls use:
 % ParticleFiltering(scan_,command_)
 %% output
-% poses = 3 x N_particles 
-function poses = ParticleFiltering(scan_,command_,nbeams_,maxrange_,fov_,map_,N_particles_,threshold_)
+% pose = 3 x 1 (estimated position of robot)
+function pose = ParticleFiltering(scan_,command_,nbeams_,maxrange_,fov_,map_,N_particles_,threshold_)
     persistent particles;
     persistent map;
     persistent nbeams;
@@ -25,6 +25,7 @@ function poses = ParticleFiltering(scan_,command_,nbeams_,maxrange_,fov_,map_,N_
             particles = [particles,RandomPose(map,robot)];
         end
         particles = [particles;1/N_particles * ones(1,N_particles)];
+        pose = weighted_robust_mean(particles);
         return;
     end
     
@@ -41,7 +42,33 @@ function poses = ParticleFiltering(scan_,command_,nbeams_,maxrange_,fov_,map_,N_
     % Sample particle sensors from Map
     particles = PropegateParticles(particles,command_,[0.01,0.01]);
     particles = WeighParticles(particles,p,map,maxrange, fov, nbeams,threshold );
-    poses = particles(1:3,:);
+    pose = weighted_robust_mean(particles);
+end
+
+function pose = weighted_robust_mean(particles)
+% Find most likely particle
+[~,idx] = max(particles(4,:));
+mlp_xy = particles(1:2,idx);
+mlp_th = particles(3,idx);
+
+% Find all particles within epsilon
+
+% Arbitrary thresholds for point grouping. May need to change.
+epsilon_xy = 10;
+epsilon_th = pi/4;
+
+dist_xy = sum((particles(1:2,:) - repmat(mlp_xy,1, size(particles,2))).^2);
+dist_th = abs(particles(3,:) - mlp_th);
+xy_epsilon_idx = dist_xy < epsilon_xy;
+th_epsilon_idx = dist_th < epsilon_th;
+pt_epsilon = xy_epsilon_idx & th_epsilon_idx;
+
+particles_epsilon = particles(:, pt_epsilon);
+
+% Compute weighted mean
+weighted_pose = particles_epsilon(1:3,:).*repmat(particles_epsilon(4,:), 3, 1);
+pose = sum (weighted_pose,2)/sum(particles_epsilon,2);
+
 end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
