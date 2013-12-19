@@ -1,11 +1,15 @@
-function GabeTestClient( sName, sColor )
+%% usage: 
+%% close all; clear all; TestClient('lumaaaa','r',8888);
+function GabeTestClient( sName, sColor, ProxyPortNum )
 
-    [robot,laser] = SetupMyRobot( sName, sColor );
+    [robot,laser] = SetupMyRobot( sName, sColor, ProxyPortNum );
  	
-
     h = plot( 0 );
     set( gcf, 'WindowKeyPressFcn', @(h_obj,evt) [] );
-
+    set( gca, 'ZDir', 'reverse', 'YDir', 'reverse' );
+    axis tight;
+    xlabel( 'x' );
+    ylabel( 'y' );
     
     w = 0;
     v = 0;
@@ -15,19 +19,16 @@ function GabeTestClient( sName, sColor )
     while 1
         t = tic();
         % 1) Sense
-        z = laser.GetMeasurement();
+        z = GetMeasurementNew(laser, robot);
 
         % 2) Plan
         p = ScanToPoints( z, xwr, laser.fov, laser.nbeams );
 
         delete(h);
-        h = plot( [xwr(1) p(1,:) xwr(1)], [xwr(2) p(2,:) xwr(2)], 'r-' );
-%        h = plot( p(1,:), p(2,:), 'r.' );
-        set( gca, 'ZDir', 'reverse', 'YDir', 'reverse' );
-        axis tight;
-        xlabel( 'x' );
-        ylabel( 'y' );
-    
+%        h = plot( [xwr(1) p(1,:) xwr(1)], [xwr(2) p(2,:) xwr(2)], 'r-' );
+        h = plot( p(1,:), p(2,:), 'r.' );
+        axis equal;
+
         k = double(get( gcf, 'CurrentCharacter' ));
         if k == 'a'
             w = w-0.01;
@@ -48,16 +49,17 @@ function GabeTestClient( sName, sColor )
         % 3) Act
 %        u = [robot.m_LinearVelocity;robot.m_AngularVelocity];
 %        u = u + [0.01*randn+0.05; 0.05*randn];
-        robot.ApplyCommand( u );
+       ApplyCommandNew( robot,u );
 %        fprintf('Updating at %5.2fhz\r\r\r\r\r\r\r\r\r', 1/toc(t) );
-
-        drawnow();
+       drawnow();
+       pause(0.1); % wait 
     end
 end
  
  
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-function [r,l] = SetupMyRobot( sName, sColor )
+% add robot to world proxy
+function [r,l] = SetupMyRobot( sName, sColor, ProxtPortNum )
     xvl = [0;0;0]; % laser position on the vehicle
     r = Robot();
     r.SetName( sName );
@@ -85,8 +87,39 @@ function [r,l] = SetupMyRobot( sName, sColor )
     r.m_LinearVelocity = 0.5;
 
     % whoa, secrets
-%    r.m_WorldProxy = WorldProxy( r, '128.164.156.40', 9999 );
-    r.m_WorldProxy = WorldProxy( r, 'localhost', 9999 );
-    l.m_WorldProxy = r.m_WorldProxy;
+    % add robot to world proxy
+    if AddRobotToWorldProxy(r, 'localhost', ProxtPortNum) ~= 1
+        error('Fatal error! fail to add robot! exit.');
+    end
 end
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+function bSuccess = AddRobotToWorldProxy(robot, sHost, nPort)
+    % connect and send message to worldproxy
+    ProxySocket = pnet( 'tcpconnect', sHost, nPort );
+    msg.type  = 'ADD_ROBOT';
+    msg.robot = robot;
+    SendMsg(ProxySocket, msg );
+    fprintf('Adding new robot to Server by proxy, waitting for world proxy to response...\n' );   
+      
+    bSuccess = 0;
+    while bSuccess == 0        
+        % wait for worldproxy to reply
+        rmsg = RecvMsg(ProxySocket, 1 );
+        if ~isempty(rmsg)         
+            if strcmp(rmsg.type, 'WELCOME_ROBOT') == 1
+               fprintf('Add new robot by proxy to Server Success.\n' );
+               bSuccess = 1;  
+               robot.m_Socket = ProxySocket;
+            else
+               rmsg.type
+            end   
+        else
+%             fprintf('get no response from proxy\n');
+        end   
+    end
+end
+
+
 
